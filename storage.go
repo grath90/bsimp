@@ -12,31 +12,31 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 )
 
-type storageEntry struct {
-	path string
+type StorageEntry struct {
+	Path string `json:"Path"`
 }
 
-func (e *storageEntry) Path() string {
-	return e.path
+func (e *StorageEntry) GetPath() string {
+	return e.Path
 }
 
-func (e *storageEntry) Name() string {
-	_, file := path.Split(e.path)
+func (e *StorageEntry) Name() string {
+	_, file := path.Split(e.Path)
 	return file
 }
 
-func (e *storageEntry) String() string {
+func (e *StorageEntry) String() string {
 	return e.Name()
 }
 
 type StorageDirectory struct {
-	storageEntry
+	StorageEntry
 }
 
 func NewStorageDirectory(p string) *StorageDirectory {
 	return &StorageDirectory{
-		storageEntry{
-			path: p,
+		StorageEntry{
+			Path: p,
 		},
 	}
 }
@@ -54,12 +54,12 @@ func ReverseSlice[T any](s []T) {
 // Parents return a slice of all parent directories from the root.
 // E.g. it returns [/, /a, /a/b] for /a/b.
 func (e *StorageDirectory) Parents() []*StorageDirectory {
-	if e.path == "" {
+	if e.Path == "" {
 		// The root directory doesn't have any parents.
 		return nil
 	}
 	var dirs []*StorageDirectory
-	p := e.path
+	p := e.Path
 	for idx := strings.LastIndexByte(p, '/'); idx != -1; idx = strings.LastIndexByte(p, '/') {
 		p = p[:idx]
 		dirs = append(dirs, NewStorageDirectory(p))
@@ -74,14 +74,14 @@ func (e *StorageDirectory) Parents() []*StorageDirectory {
 }
 
 type StorageFile struct {
-	storageEntry
-	Size int64
+	StorageEntry
+	Size int64 `json:"Size"`
 }
 
 func NewStorageFile(p string, size int64) *StorageFile {
 	return &StorageFile{
-		storageEntry: storageEntry{
-			path: p,
+		StorageEntry: StorageEntry{
+			Path: p,
 		},
 		Size: size,
 	}

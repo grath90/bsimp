@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"github.com/clerkinc/clerk-sdk-go/clerk"
 	"math/rand"
 	"time"
 
@@ -24,19 +25,22 @@ func main() {
 
 	cfg, err := NewConfig(configPath)
 	if err != nil {
-		slog.Error("failed parsing confg", err, slog.String("path", configPath))
+		print(err.Error())
+		// slog.Error("failed parsing confg", err, slog.String("path", configPath))
 		return
 	}
 
 	store, err := NewS3Storage(cfg.S3)
 	if err != nil {
-		slog.Error("failed initializing S3 storage", err)
+		// slog.Error("failed initializing S3 storage", err)
 		return
 	}
 
 	mediaLib := NewMediaLibrary(store)
 
+	client, err := clerk.NewClient(cfg.Clerk.Secret)
+
 	slog.Info("started HTTP server", slog.String("address", httpAddr))
-	err = StartServer(mediaLib, httpAddr)
-	slog.Error("failed starting HTTP server", err)
+	err = StartServer(mediaLib, httpAddr, client)
+	// slog.Error("failed starting HTTP server", err)
 }

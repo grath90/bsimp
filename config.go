@@ -36,8 +36,13 @@ type S3Config struct {
 	Credentials          *S3Credentials
 }
 
+type ClerkConfig struct {
+	Secret string
+}
+
 type Config struct {
-	S3 S3Config
+	S3    S3Config
+	Clerk ClerkConfig
 }
 
 var errMissingBucket = errors.New("s3 bucket is required")

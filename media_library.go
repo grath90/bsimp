@@ -5,11 +5,11 @@ import (
 )
 
 type MediaListing struct {
-	CurrentDirectory *StorageDirectory
-	Directories      []*StorageDirectory
-	Files            []*StorageFile
-	Cover            *StorageFile
-	AudioTracks      []*StorageFile
+	CurrentDirectory *StorageDirectory   `json:"CurrentDirectory"`
+	Directories      []*StorageDirectory `json:"Directories"`
+	Files            []*StorageFile      `json:"Files"`
+	Cover            *StorageFile        `json:"Cover,omitempty"`
+	AudioTracks      []*StorageFile      `json:"AudioTracks"`
 }
 
 type MediaLibrary struct {
@@ -50,7 +50,7 @@ func (ml *MediaLibrary) List(p string) (*MediaListing, error) {
 	for _, f := range files {
 		if IsAudioFile(f) {
 			tracks = append(tracks, f)
-		} else if cover == nil || f.Path() != cover.Path() {
+		} else if cover == nil || f.GetPath() != cover.GetPath() {
 			otherFiles = append(otherFiles, f)
 		}
 	}
