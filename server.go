@@ -2,25 +2,21 @@ package main
 
 import (
 	"encoding/json"
-	// "embed"
+	"golang.org/x/exp/slog"
+
 	"errors"
 	"fmt"
-	// "html/template"
-	// "io/fs"
 	"math/rand"
 	"net/http"
 	"strings"
 
 	"github.com/clerkinc/clerk-sdk-go/clerk"
 	"github.com/gorilla/mux"
-	"golang.org/x/exp/slog"
+	"github.com/rs/cors"
 )
 
-// var embedFS embed.FS
-
 type Server struct {
-	mediaLib *MediaLibrary
-	// tmpl          *template.Template
+	mediaLib      *MediaLibrary
 	staticVersion string
 }
 
@@ -63,19 +59,9 @@ func DisableFileListing(h http.Handler) http.Handler {
 	})
 }
 
-type TemplateData struct {
-	StaticVersion string
-	*MediaListing
-}
-
 func (s *Server) ListingHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 	path := r.URL.Path
 	vars := mux.Vars(r)
-
-	if strings.Contains(path, "/library") {
-		path = strings.Replace(path, "/library", "", 1)
-	}
 
 	if vars["album"] != "" {
 		path = vars["album"]
@@ -103,7 +89,6 @@ type SongRedirect struct {
 }
 
 func (s *Server) StreamHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 	vars := mux.Vars(r)
 	song := vars["song"]
 	album := vars["album"]
@@ -128,30 +113,16 @@ func (s *Server) StreamHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// Don't include sprig just for one function.
-var templateFunctions = map[string]any{
-	"defaultString": func(s string, def string) string {
-		if s == "" {
-			return def
-		}
-		return s
-	},
-}
-
 // StartServer starts HTTP server.
 func StartServer(mediaLib *MediaLibrary, addr string, clerkClient clerk.Client) error {
-	// tmpl, err := template.New("").Funcs(templateFunctions).ParseFS(embedFS, "templates/*.gohtml")
-	// if err != nil {
-	// 	return err
-	// }
 	staticVersion := fmt.Sprintf("%x", rand.Uint64())
 	s := Server{
-		mediaLib: mediaLib,
-		// tmpl:          tmpl,
+		mediaLib:      mediaLib,
 		staticVersion: staticVersion,
 	}
 
 	r := mux.NewRouter()
+
 	r.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Get the JWT from the request header
@@ -170,7 +141,7 @@ func StartServer(mediaLib *MediaLibrary, addr string, clerkClient clerk.Client) 
 			// If the JWT is invalid...
 			if err != nil {
 				// ...return an error
-				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				http.Error(w, "Invalid Token", http.StatusUnauthorized)
 				return
 			}
 
@@ -179,29 +150,33 @@ func StartServer(mediaLib *MediaLibrary, addr string, clerkClient clerk.Client) 
 		})
 	})
 
+	// Middleware to strip /api/library prefix from path
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if strings.Contains(r.URL.Path, "/api/library") {
+				r.URL.Path = strings.Replace(r.URL.Path, "/api/library", "", 1)
+			}
+			next.ServeHTTP(w, r)
+		})
+	})
+
 	sub := r.PathPrefix("/api").Subrouter()
 	// r.HandleFunc("/library/", ValidatePath(NormalizePath(s.ListingHandler))).Methods("GET")
 	// r.HandleFunc("/stream/", ValidatePath(NormalizePath(s.StreamHandler))).Methods("GET")
-	sub.HandleFunc("/library", s.ListingHandler).Methods("GET")
-	sub.HandleFunc("/library/{album}", s.ListingHandler).Methods("GET")
-	sub.HandleFunc("/stream/{album}/{song}", s.StreamHandler).Methods("GET")
-	// mux := http.NewServeMux()
+	sub.HandleFunc("/library", ValidatePath(NormalizePath(s.ListingHandler))).Methods(http.MethodGet, http.MethodOptions)
+	sub.HandleFunc("/library/{album}", s.ListingHandler).Methods(http.MethodGet, http.MethodOptions)
+	sub.HandleFunc("/stream/{album}/{song}", s.StreamHandler).Methods(http.MethodGet, http.MethodOptions)
 
-	//mux.Handle("/", http.RedirectHandler("/library/", http.StatusMovedPermanently))
+	c := cors.New(cors.Options{
+		AllowedOrigins: []string{"*"},
+		AllowedMethods: []string{"GET", "POST", "OPTIONS", "PUT"},
+		AllowedHeaders: []string{"Origin", "Content-Type", "Authorization"},
+	})
 
-	// staticFS, err := fs.Sub(embedFS, "static")
-	// if err != nil {
-	// 	return err
-	// }
-	// staticPath := fmt.Sprintf("/static/%s/", staticVersion)
-	// mux.Handle(staticPath, DisableFileListing(http.StripPrefix(staticPath, http.FileServer(http.FS(staticFS)))))
-
-	// mux.Handle("/library/", http.StripPrefix("/library/", ValidatePath(NormalizePath(s.ListingHandler))))
-	// mux.Handle("/stream/", http.StripPrefix("/stream/", ValidatePath(NormalizePath(s.StreamHandler))))
-
+	handler := c.Handler(r)
 	srv := &http.Server{
 		Addr:    addr,
-		Handler: r,
+		Handler: handler,
 	}
 	return srv.ListenAndServe()
 	// return http.ListenAndServe(addr, mux)
