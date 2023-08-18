@@ -61,10 +61,8 @@ func DisableFileListing(h http.Handler) http.Handler {
 
 func (s *Server) ListingHandler(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Path
-	vars := mux.Vars(r)
-
-	if vars["album"] != "" {
-		path = vars["album"]
+	if strings.HasPrefix(path, "/") {
+		path = strings.Replace(path, "/", "", 1)
 	}
 
 	listing, err := s.mediaLib.List(path)
@@ -89,12 +87,11 @@ type SongRedirect struct {
 }
 
 func (s *Server) StreamHandler(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	song := vars["song"]
-	album := vars["album"]
+	path := r.URL.Path
+
 	var SongRedirect = new(SongRedirect)
 
-	url, err := s.mediaLib.ContentURL(album + "/" + song)
+	url, err := s.mediaLib.ContentURL(path)
 
 	if err != nil {
 		httpError(r, w, err, http.StatusInternalServerError)
@@ -155,17 +152,16 @@ func StartServer(mediaLib *MediaLibrary, addr string, clerkClient clerk.Client) 
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if strings.Contains(r.URL.Path, "/api/library") {
 				r.URL.Path = strings.Replace(r.URL.Path, "/api/library", "", 1)
+			} else if strings.Contains(r.URL.Path, "/api/stream") {
+				r.URL.Path = strings.Replace(r.URL.Path, "/api/stream", "", 1)
 			}
 			next.ServeHTTP(w, r)
 		})
 	})
 
 	sub := r.PathPrefix("/api").Subrouter()
-	// r.HandleFunc("/library/", ValidatePath(NormalizePath(s.ListingHandler))).Methods("GET")
-	// r.HandleFunc("/stream/", ValidatePath(NormalizePath(s.StreamHandler))).Methods("GET")
-	sub.HandleFunc("/library", ValidatePath(NormalizePath(s.ListingHandler))).Methods(http.MethodGet, http.MethodOptions)
-	sub.HandleFunc("/library/{album}", s.ListingHandler).Methods(http.MethodGet, http.MethodOptions)
-	sub.HandleFunc("/stream/{album}/{song}", s.StreamHandler).Methods(http.MethodGet, http.MethodOptions)
+	sub.PathPrefix("/library").Handler(ValidatePath(NormalizePath(s.ListingHandler))).Methods(http.MethodGet, http.MethodOptions)
+	sub.PathPrefix("/stream").Handler(ValidatePath(NormalizePath(s.StreamHandler))).Methods(http.MethodGet, http.MethodOptions)
 
 	c := cors.New(cors.Options{
 		AllowedOrigins: []string{"*"},
